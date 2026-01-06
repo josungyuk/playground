@@ -3,14 +3,9 @@ from selenium import webdriver
 import requests
 
 driver = webdriver.Chrome()
-news_organ = {
-    "yna" : "https://www.yna.co.kr/",
+news_organ_homepage = {
+    "yna" : "https://www.yna.co.kr",
     "ytn" : "https://www.ytn.co.kr"
-}
-
-news_organ_content_tag = {
-    "yna" : "li[data-cid ^= 'AKR']",
-    "ytn" : ".title a[href ^= 'https://www.ytn.co.kr/_ln/']"
 }
 
 news_organ_part = {
@@ -25,13 +20,29 @@ news_organ_part = {
     }
 }
 
+news_organ_content_tag = {
+    "yna" : ".list01 a[href ^= 'https://www.yna.co.kr/view/']",
+    "ytn" : ".title a[href ^= 'https://www.ytn.co.kr/_ln/']"
+}
+
+new_organ_extract_title_tag = {
+    "yna" : "h1.tit01",
+    "ytn" : "h2.news_title"
+}
+
+new_organ_extract_content_tag = {
+    "yna" : "div.story-news.article",
+    "ytn" : "#CmAdContent.paragraph"
+}
+
 removing_organ_tag = {
     "yna" : [
         "em",
         "figcaption",
         "p.txt-copyright.adrs",
         "aside",
-        "div.related-zone"
+        "div.related-zone",
+        "#newsWriterCarousel01"
     ],
 
     "ytn" : [
@@ -50,8 +61,8 @@ removing_organ_text = {
     ]
 }
 
-def get_newspage(driver: webdriver, news_organ: str, page_id: str, content_tag: str) -> str:
-    url = f"{news_organ}/{page_id}"
+def get_newspage(driver: webdriver, news_organ: str, homepage_addr: str, page_id: str, content_tag: str) -> str:
+    url = f"{homepage_addr}/{page_id}"
 
     driver.get(url)
     page = driver.page_source
@@ -60,16 +71,17 @@ def get_newspage(driver: webdriver, news_organ: str, page_id: str, content_tag: 
     links = [a["href"] for a in contents][:1]
 
     for link in links:
-        print(fetch_link(link))
+        print(fetch_link(link, news_organ))
 
 
-def fetch_link(link: str) -> str | None:
+def fetch_link(link: str, organ: str) -> str | None:
     try:
         html = fetch_html(link)
         soup = parse_html(html)
-        soup = exctract_contents(soup)
-        soup = decompose_contents_tag(soup, removing_organ_tag.get("ytn"))
-        return decompose_contents_text(soup, removing_organ_text.get("ytn"))
+        title = extract_title(soup, new_organ_extract_title_tag.get(organ))
+        soup = extract_contents(soup, new_organ_extract_content_tag.get(organ))
+        soup = decompose_contents_tag(soup, removing_organ_tag.get(organ))
+        return f"{title} \n {decompose_contents_text(soup, removing_organ_text.get(organ))}"
     except requests.exceptions.RequestException as e:
         print(f"[Error] {link}에서 {e} 발생")
         return None
@@ -88,8 +100,11 @@ def fetch_html(url: str) -> str:
 def parse_html(html: str) -> str:
     return BeautifulSoup(html, "lxml")
 
-def exctract_contents(soup: BeautifulSoup) -> str:
-    content = soup.select_one("#CmAdContent.paragraph")
+def extract_title(soup: BeautifulSoup, tag: str) -> str:
+    return soup.select_one(tag).get_text("\n", strip=True)
+
+def extract_contents(soup: BeautifulSoup, tag: str) -> str:
+    content = soup.select_one(tag)
     if not content:
         return None
     
@@ -111,4 +126,4 @@ def decompose_contents_text(soup: BeautifulSoup, selector: list) -> str:
     return soup.get_text("\n", strip=True)
 
 
-get_newspage(driver, news_organ.get("ytn"), news_organ_part.get("ytn").get("economy"), news_organ_content_tag.get("ytn"))
+get_newspage(driver, "yna", news_organ_homepage.get("yna"), news_organ_part.get("yna").get("economy"), news_organ_content_tag.get("yna"))
