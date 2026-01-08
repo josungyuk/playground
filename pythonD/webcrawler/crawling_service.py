@@ -1,65 +1,16 @@
+import crawling_domain as nd
+
 from bs4 import BeautifulSoup
 from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from urllib.parse import urljoin
 import requests
+import random
 
-driver = webdriver.Chrome()
-news_organ_homepage = {
-    "yna" : "https://www.yna.co.kr",
-    "ytn" : "https://www.ytn.co.kr"
-}
+options = Options()
+options.add_argument("--incognito")
 
-news_organ_part = {
-    "yna" : {
-        "economy" : "economy/all",
-        "society" : "society/all"
-    },
-
-    "ytn" : {
-        "economy" : "news/list.php?mcd=0102",
-        "society" : "news/list.php?mcd=0103"
-    }
-}
-
-news_organ_content_tag = {
-    "yna" : ".list01 a[href ^= 'https://www.yna.co.kr/view/']",
-    "ytn" : ".title a[href ^= 'https://www.ytn.co.kr/_ln/']"
-}
-
-new_organ_extract_title_tag = {
-    "yna" : "h1.tit01",
-    "ytn" : "h2.news_title"
-}
-
-new_organ_extract_content_tag = {
-    "yna" : "div.story-news.article",
-    "ytn" : "#CmAdContent.paragraph"
-}
-
-removing_organ_tag = {
-    "yna" : [
-        "em",
-        "figcaption",
-        "p.txt-copyright.adrs",
-        "aside",
-        "div.related-zone",
-        "#newsWriterCarousel01"
-    ],
-
-    "ytn" : [
-    ]
-}
-
-removing_organ_text = {
-    "yna" : [
-    ],
-
-    "ytn" : [
-        "※ '당신의 제보가 뉴스가 됩니다'",
-        "[카카오톡]",
-        "[전화]",
-        "[메일]"
-    ]
-}
+driver = webdriver.Chrome(options=options)
 
 def get_newspage(driver: webdriver, news_organ: str, homepage_addr: str, page_id: str, content_tag: str) -> str:
     url = f"{homepage_addr}/{page_id}"
@@ -68,7 +19,10 @@ def get_newspage(driver: webdriver, news_organ: str, homepage_addr: str, page_id
     page = driver.page_source
     soup = BeautifulSoup(page, "lxml")
     contents = soup.select(content_tag)
-    links = [a["href"] for a in contents][:1]
+    links = [
+        urljoin(url, a["href"])
+        for a in contents
+    ][:1]
 
     for link in links:
         print(fetch_link(link, news_organ))
@@ -78,21 +32,22 @@ def fetch_link(link: str, organ: str) -> str | None:
     try:
         html = fetch_html(link)
         soup = parse_html(html)
-        title = extract_title(soup, new_organ_extract_title_tag.get(organ))
-        soup = extract_contents(soup, new_organ_extract_content_tag.get(organ))
-        soup = decompose_contents_tag(soup, removing_organ_tag.get(organ))
-        return f"{title} \n {decompose_contents_text(soup, removing_organ_text.get(organ))}"
+        title = extract_title(soup, nd.new_organ_extract_title_tag.get(organ))
+        soup = extract_contents(soup, nd.new_organ_extract_content_tag.get(organ))
+        soup = decompose_contents_tag(soup, nd.removing_organ_tag.get(organ))
+        return f"{title} \n {decompose_contents_text(soup, nd.removing_organ_text.get(organ))}"
     except requests.exceptions.RequestException as e:
         print(f"[Error] {link}에서 {e} 발생")
         return None
 
 
 def fetch_html(url: str) -> str:
-    header = {
-        "User-Agent" : "Mozilla/5.0"
-    }
+    headers = [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3",
+            "Mozilla/5.0"
+        ]
 
-    result = requests.get(url, headers=header, timeout=5)
+    result = requests.get(url, headers={"User-Agent": random.choice(headers)}, timeout=5)
     result.raise_for_status()
 
     return result.text
@@ -125,5 +80,12 @@ def decompose_contents_text(soup: BeautifulSoup, selector: list) -> str:
 
     return soup.get_text("\n", strip=True)
 
+parameters = [
+    (driver, nd.NewsSource.YNA, nd.news_organ_homepage[(nd.NewsSource.YNA)], nd.news_organ_type[nd.NewsSource.YNA][nd.NewsType.ECONOMY], nd.news_organ_content_tag[(nd.NewsSource.YNA)]),
+    (driver, nd.NewsSource.YTN, nd.news_organ_homepage[(nd.NewsSource.YTN)], nd.news_organ_type[nd.NewsSource.YTN][nd.NewsType.ECONOMY], nd.news_organ_content_tag[(nd.NewsSource.YTN)]),
+    (driver, nd.NewsSource.BBC, nd.news_organ_homepage[(nd.NewsSource.BBC)], nd.news_organ_type[nd.NewsSource.BBC][nd.NewsType.ECONOMY], nd.news_organ_content_tag[(nd.NewsSource.BBC)]),
+    # (driver, nd.NewsSource.BBC, nd.news_organ_homepage[(nd.NewsSource.BBC)], nd.news_organ_type[nd.NewsSource.BBC][nd.NewsType.ECONOMY], nd.news_organ_content_tag[(nd.NewsSource.BBC)]),
+]
 
-get_newspage(driver, "yna", news_organ_homepage.get("yna"), news_organ_part.get("yna").get("economy"), news_organ_content_tag.get("yna"))
+for param in parameters:
+    get_newspage(*param)
